@@ -14,24 +14,42 @@ foreach ($events as $event) {
   if ($event instanceof \LINE\LINEBot\Event\MessageEvent) {
     if($event instanceof \LINE\LINEBot\Event\MessageEvent\TextMessage) {
 
+      // createと入力送信したら、自分がcreateと入力送信したことになり、
+      // それに反応して、リッチメニューIDをBotが返信してくる
+      // 複数回可能、毎度リッチメニューIDが異なって返信してくる
       if($event->getText() === 'create') {
         $bot->replyMessage($event->getReplyToken(),new \LINE\LINEBot\MessageBuilder\TextMessageBuilder(createNewRichmenu(getenv('CHANNEL_ACCESS_TOKEN'))));
       }
+
+      // listと入力送信すると、自分がlistと入力送信したことになり、
+      // それに反応して、カルーセルで返ってくる
+      // リッチメニューIDのテキスト表示と、ボタン3個（ upload image + delete + link )
       else if($event->getText() === 'list') {
         $result = getListOfRichmenu(getenv('CHANNEL_ACCESS_TOKEN'));
 
         if(isset($result['richmenus']) && count($result['richmenus']) > 0) {
           $builders = new \LINE\LINEBot\MessageBuilder\MultiMessageBuilder();
+          
           $columns = Array();
           for($i = 0; $i < count($result['richmenus']); $i++) {
             $richmenu = $result['richmenus'][$i];
             $actionArray = array();
             array_push($actionArray, new LINE\LINEBot\TemplateActionBuilder\MessageTemplateActionBuilder (
               'upload image', 'upload::' . $richmenu['richMenuId']));
+              // カルーセルの中のupload imageボタンを押すと
+              // 「upload::richmenu-xxxxxxxxxx」と自分が入力送信したことになり、
+              // すると、そのテキストメッセージに反応して、「success.Image #04 has uploaded onto richmenu-xxxxxx」とのテキストメッセージが返ってくる
             array_push($actionArray, new LINE\LINEBot\TemplateActionBuilder\MessageTemplateActionBuilder (
               'delete', 'delete::' . $richmenu['richMenuId']));
+              // カルーセルの中のdeleteボタンを押すと
+              // 「delete::richmenu-xxxxxxxxxx」と自分が入力送信したことになり、
+              // すると、そのテキストメッセージに反応して、「success」とのテキストメッセージが返ってくる
             array_push($actionArray, new LINE\LINEBot\TemplateActionBuilder\MessageTemplateActionBuilder (
               'link', 'link::' . $richmenu['richMenuId']));
+              // カルーセルの中のlinkボタンを押すと
+              // 「link::richmenu-xxxxxxxxxx」と自分が入力送信したことになり、
+              // すると、そのテキストメッセージに反応して、「success」とのテキストメッセージが返ってくる
+              // そしてようやくリッチメニューが現れる（自力でメニューバーを開かないといけない）
             $column = new \LINE\LINEBot\MessageBuilder\TemplateBuilder\CarouselColumnTemplateBuilder (
               null,
               $richmenu['richMenuId'],
@@ -57,12 +75,22 @@ foreach ($events as $event) {
           $bot->replyMessage($event->getReplyToken(),new \LINE\LINEBot\MessageBuilder\TextMessageBuilder('No richmenu.'));
         }
       }
+
+      // unlinkと入力送信すると
+      // 「success」と返信が来る
+      // そして、リッチメニューがなくなった
       else if($event->getText() === 'unlink') {
         $bot->replyMessage($event->getReplyToken(),new \LINE\LINEBot\MessageBuilder\TextMessageBuilder(unlinkFromUser(getenv('CHANNEL_ACCESS_TOKEN'), $event->getUserId())));
       }
+
+      // checkと入力送信すると
+      // 「the user has no richmenu」と返信が来る(何もリッチメニューない状態の時)
+      //  もしくは「richmenu-xxxxxxxxx」と返信が来る（リッチメニュー現れてる状態の時）
       else if($event->getText() === 'check') {
         $bot->replyMessage($event->getReplyToken(),new \LINE\LINEBot\MessageBuilder\TextMessageBuilder(checkRichmenuOfUser(getenv('CHANNEL_ACCESS_TOKEN'), $event->getUserId())));
       }
+
+      // 以下カルーセル内のボタン
       else if(substr($event->getText(),0, 8) === 'upload::') {
         $bot->replyMessage($event->getReplyToken(),new \LINE\LINEBot\MessageBuilder\TextMessageBuilder(uploadRandomImageToRichmenu(getenv('CHANNEL_ACCESS_TOKEN'), substr($event->getText(), 8))));
       }
@@ -72,6 +100,10 @@ foreach ($events as $event) {
       else if(substr($event->getText(),0, 6) === 'link::') {
         $bot->replyMessage($event->getReplyToken(),new \LINE\LINEBot\MessageBuilder\TextMessageBuilder(linkToUser(getenv('CHANNEL_ACCESS_TOKEN'), $event->getUserId(), substr($event->getText(), 6))));
       }
+
+      // 以下、現れたリッチメニューのボタンを押すと
+      // まず自分で「up」などと入力送信したことになり、
+      // それに反応して、以下のテキストが、全部、毎回同じ、で返ってくる
       else {
         $bot->replyMessage($event->getReplyToken(),new \LINE\LINEBot\MessageBuilder\TextMessageBuilder(
           '"create" - create new Richmenu to channel.' . PHP_EOL .
@@ -87,6 +119,7 @@ foreach ($events as $event) {
   }
 }
 
+// リッチメニューの各ボタンには「up」「right」「down」「left」「btn b」「btn a」が用意されている
 function createNewRichmenu($channelAccessToken) {
   $sh = <<< EOF
   curl -X POST \
@@ -137,6 +170,7 @@ EOF;
   $result = json_decode(shell_exec(str_replace('\\', '', str_replace(PHP_EOL, '', $sh))), true);
   if(isset($result['message'])) {
     return $result['message'];
+    // 失敗するとエラー内容が記述されて返ってきます。{'message': 'error description'}
   }
   else {
     return 'success';
@@ -174,6 +208,7 @@ EOF;
   $result = json_decode(shell_exec(str_replace('\\', '', str_replace(PHP_EOL, '', $sh))), true);
   if(isset($result['message'])) {
     return $result['message'];
+    // 失敗するとエラー内容が記述されて返ってきます。{'message': 'error description'}
   }
   else {
     return 'success';
@@ -184,6 +219,7 @@ function uploadRandomImageToRichmenu($channelAccessToken, $richmenuId) {
   if(!isRichmenuIdValid($richmenuId)) {
     return 'invalid richmenu id';
   }
+  // 用意された５種類の画像の中から、ランダムに選ばれ、リッチメニューとしてアップロードされる
   $randomImageIndex = rand(1, 5);
   $imagePath = realpath('') . '/' . 'controller_0' . $randomImageIndex . '.png';
   $sh = <<< EOF
@@ -197,6 +233,7 @@ EOF;
   $result = json_decode(shell_exec(str_replace('\\', '', str_replace(PHP_EOL, '', $sh))), true);
   if(isset($result['message'])) {
     return $result['message'];
+    // 失敗するとエラー内容が記述されて返ってきます。{'message': 'error description'}
   }
   else {
     return 'success. Image #0' . $randomImageIndex . ' has uploaded onto ' . $richmenuId;
